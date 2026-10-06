@@ -1,0 +1,413 @@
+---
+name: scholarpen-workflow
+description: Reproduce the supplied ScholarPen application workflow for systematic literature reviews, preserving linked review state from protocol through ingestion, deduplication, screening, PRISMA, extraction, synthesis, discussion, citation configuration, manuscript assembly, export, and final audit.
+---
+
+# ScholarPen 1.7 — Application-Mirroring Review Engine
+
+## Purpose
+ScholarPen 1.7 mirrors the supplied ScholarPen application rather than acting as a generic review checklist. Treat the review as a single linked workspace state. Every later output must be derived from the current state of earlier stages.
+
+The supplied application uses staged navigation, persistent review state, blank new workspaces with demonstration content only when explicitly requested, protocol/formulation setup, record ingestion, screening, PRISMA calculation, synthesis/discussion, citation-style selection, manuscript generation and export. This skill reproduces those behaviors conversationally.
+
+## Non-negotiable evidence rules
+- When records/files are supplied, execute the applicable stages; do not merely explain what could be done.
+- Never invent bibliographic metadata, records, findings, sample sizes, statistics, quotations, DOI, journal details, full-text assessment, risk-of-bias judgments, effect estimates, certainty ratings, or search results.
+- Preserve database provenance exactly. If only Scopus records are supplied, PRISMA must identify Scopus only; do not add Web of Science merely because it is available as an option.
+- Missing information stays missing. Use “not reported” or an explicit unavailable state rather than inference.
+- Do not silently replace user-provided review criteria, titles, search strings, decisions, or counts.
+- Title/abstract screening is not full-text eligibility assessment. Do not describe it as such.
+- No AI/application/provider terminology in the manuscript unless the user explicitly requests it.
+
+## 1. Workspace/state model
+Maintain these linked state objects throughout the review:
+1. protocol
+2. records
+3. dupesRemoved
+4. screening
+5. characteristics
+6. synthesis
+7. discussion
+8. PRISMA checklist
+9. PRISMA-S checklist
+10. ROSES checklist
+11. citationStyle
+12. prismaOverrides
+
+Derived collections:
+- includedRecords = records whose screening decision is include
+- excludedRecords = records whose screening decision is exclude
+- unresolvedRecords = records without an agreed screening decision
+
+Sort included records by screening score when a score exists, matching the supplied application behavior. Never let a derived list become a new source of truth.
+
+## 2. Stage map — mirror the supplied application
+Use the following conversational stage order. Do not skip a stage merely because the user is moving quickly; execute it from available state and clearly mark stages that cannot yet be completed.
+
+### Stage 0 — Review setup / landing
+- Start a blank workspace by default.
+- If records are uploaded, begin ingestion rather than generating a demonstration dataset.
+- Demonstration/sample data is opt-in only.
+- Display current title, record count, included count, unresolved count, citation style and review progress when relevant.
+
+### Stage 1 — Methods Protocol
+Mirror the MethodsProtocol component.
+Collect or derive from user input:
+- review title
+- background/rationale
+- objectives
+- research questions
+- inclusion criteria
+- exclusion criteria
+- publication period
+- language limits
+- study-design limits
+- information sources
+- search dates
+- formulation framework
+
+Supported formulation frameworks: PICO, PICOC, PEO, SPIDER, SPICE, CIMO, CUSTOM, NONE.
+
+When the title/domain is sufficient, recommend a framework with a confidence label and justification, but require the user's confirmation before treating the recommendation as final. Never force PICO for every domain. The supplied application uses domain cues including engineering/technology, environmental/ecological/exposure topics, and qualitative/mixed-methods topics to recommend an appropriate framework.
+
+### Stage 2 — Search Strings Generator
+Generate database-specific search strings from the confirmed protocol. Preserve the exact search strings the user supplies. If strings are generated, label them as generated until the user accepts/uses them.
+
+Store per-source information such as:
+- database/source name
+- platform/provider where supplied
+- search date
+- records retrieved
+- exact query string
+- filters/limits
+
+Do not fabricate retrieval counts. If a source has no actual retrieval count, keep it unknown.
+
+### Stage 3 — Records Import / Library
+Accept RIS, BibTeX, CSV, Web of Science plain text/tab exports, PubMed MEDLINE/NBIB and structured citation exports.
+
+Preserve:
+- stable record ID
+- title
+- complete available authors
+- year
+- abstract
+- source/journal
+- DOI
+- databaseSource/databaseSources
+- study type
+- other supplied metadata
+
+Database detection must be evidence-based. Recognize Scopus indicators, Web of Science indicators, PubMed/PMID, IEEE, Cochrane and other explicit source markers. If uncertain, use Other rather than guessing.
+
+### Stage 4 — Deduplication
+Deduplicate in this order:
+1. normalized DOI exact match
+2. normalized title exact match
+
+Normalize DOI by removing DOI URL/prefix variants, query fragments, whitespace and case differences. Normalize titles by Unicode normalization, lowercasing, removing diacritics/punctuation and collapsing whitespace.
+
+For duplicate groups, retain the richest bibliographic record and merge database provenance. Report:
+- imported count
+- duplicate groups
+- duplicates removed
+- unique retained
+- source distribution
+- provenance merged
+
+Never manufacture a duplicate count simply to make PRISMA reconcile.
+
+### Stage 5 — Screening
+Mirror the supplied batch-screening behavior.
+- Screen title/abstract evidence unless full text is actually supplied and reviewed.
+- Process records in batches when volume is high.
+- For each completed decision store score, reason, include/exclude decision, agreement state, exclusion reason and notes when available.
+- Score is bounded 0–100 when a scoring model is used.
+- Include/exclude threshold must be explicit; do not silently alter a user-confirmed threshold.
+- If a batch fails, preserve all successful decisions and leave unresolved records pending rather than assigning fabricated decisions.
+- If a quota/rate-limit issue occurs, report the completed portion and continue only when the user asks to continue.
+- Never use the legacy placeholder exclusion reason: “No explicit protocol match was confirmed during the brief record scan; excluded conservatively from the synthesis set.”
+- Do not treat unresolved records as excluded.
+
+### Stage 6 — Comprehensive Screening Decision Table
+For included records, create exactly these default columns:
+1. Article Information (Title, Author & Journal)
+2. Screening Status
+3. Academic Screening Justification
+
+Use the recorded screening reason. If none exists, use exactly:
+“No screening justification recorded. Full-text eligibility was not verified.”
+
+Only actual included records belong in this table. The table must support Markdown and CSV output. CSV filename:
+`Table1_Academic_Screening_Justifications.csv`
+
+The table footer/metadata must state that included status and justification come from the recorded screening decision and that full-text eligibility was not verified unless it actually was.
+
+### Stage 7 — Study Characteristics
+Extract only reported evidence into a linked characteristics matrix. Use the application's fields:
+- author/year
+- category
+- country
+- sample size
+- population
+- intervention/focus
+- comparator
+- primary outcome
+- study design
+- key finding
+- acceptance justification
+
+Missing characteristics are omitted or explicitly marked not reported; never inferred from citation metadata.
+
+### Stage 8 — Evidence Synthesis
+Build synthesis from included records and characteristics.
+Support:
+- descriptive evidence overview
+- thematic/subtopic synthesis
+- methodological mapping
+- outcome patterns
+- consistency/contradiction
+- evidence gaps
+- key findings table
+
+Each subtopic/theme must store supporting record IDs. Quantitative pooling is allowed only when the supplied data actually support it and the user requests/performs appropriate analysis. Otherwise state that synthesis is narrative/qualitative.
+
+### Stage 9 — Evidence-derived figures
+Generate only figures whose data are present in the current workspace.
+
+Conceptual framework:
+- group actual characteristics by their categories/dimensions
+- show counts derived from included records
+- do not invent dimensions
+
+Thematic relationship diagram:
+- center node: Included Literature
+- satellite nodes: actual supported synthesis topics
+- display n = number of supporting studies derived from record IDs
+- strip numeric section prefixes from displayed topic titles
+- do not fabricate topics when synthesis is empty
+
+### Stage 10 — PRISMA 2020 / PRISMA-S / ROSES
+Use the application's dynamic PRISMA calculation model.
+
+PRISMA identification:
+- use actual database/source counts from informationSources when supplied
+- otherwise derive from imported records/provenance only where defensible
+- respect explicit manual database overrides
+- include other sources only when actually supplied
+
+Removed before screening:
+- duplicates from deduplication state
+- any other removal category only when explicitly recorded
+
+Screening:
+- records screened = actual post-dedup records unless explicitly overridden
+- records excluded = actual screening exclusions
+- unresolved records remain unresolved and must not be silently counted as excluded
+- report exclusion-reason breakdown from screening decisions
+
+Eligibility:
+- reports sought, not retrieved and assessed are nullable when full-text eligibility was not performed
+- do not invent full-text numbers
+- distinguish the compact title/abstract-bounded flow from a full eligibility flow
+- manual overrides may supply actual eligibility counts; preserve their provenance
+
+Inclusion:
+- studies included = actual included screening records
+- studies included in synthesis = actual synthesis pool
+- meta-analysis count only when an actual meta-analysis was performed
+
+Validate all PRISMA counts mathematically. Report unresolved inconsistencies instead of forcing reconciliation.
+
+### PRISMA audit trail
+For every major count retain a source label such as:
+- Bibliographic Import
+- Deduplication Pipeline
+- Screening Ledger
+- Study Characteristics
+- Synthesis Pool
+- Manual Override
+- Not Performed / Title-Abstract Bounded
+
+Never use a hypothetical/improvised PRISMA funnel as if it were the user's actual review.
+
+### PRISMA 2020 renderer behavior
+When full-text eligibility fields are null/unperformed, render the compact identification → deduplication → screening → included flow appropriate to the actual state. When actual reports sought/assessed/exclusion reasons are available, render the full eligibility stage.
+
+### PRISMA-S
+Track actual information sources, search methods, search limits, search dates, record management, deduplication and reproducibility. Do not mark an item Reported simply because a field exists.
+
+### ROSES
+Apply when the review domain/type is appropriate, especially environmental/ecological evidence synthesis. Again, status must reflect actual review evidence, not template defaults.
+
+## 11. Synthesis + Discussion stage
+Mirror the supplied four-part DiscussionSection:
+1. Principal Findings and Contextual Interpretation
+2. Methodological Characteristics of Included Evidence
+3. Review Methodological Context / Limitations of the Review Process
+4. Practical Implications and Future Research Directions
+
+Discussion requirements:
+- cautious objective academic prose
+- no first person
+- no bullet/list style in manuscript discussion unless requested
+- holistic cross-study interpretation
+- use only evidence supported by included records and characteristics
+- no invented pooled effects, confidence intervals, significance, reviewer activity, search coverage, full-text verification or validation claims
+- no PRISMA item numbers in prose
+- no application/provider/AI names in manuscript unless requested
+
+If AI generation fails, preserve the completed evidence state and provide a conservative structured fallback rather than inventing content.
+
+## 12. Citation Style stage
+Mirror CitationStyleSection.
+Supported styles:
+- APA 7
+- IEEE
+- Vancouver
+- Harvard
+
+The selected style applies to in-text citations and the final reference list. References are generated directly from the final included records, not from an independent invented bibliography.
+
+Before manuscript generation, perform an evidence-alignment check:
+- every substantive literature citation maps to an included record
+- every reference maps to a record
+- no included record with missing bibliographic metadata is silently completed from imagination
+- no citation points to a record outside the final evidence pool unless explicitly labeled as background/non-included material
+
+## 13. Manuscript stage
+Mirror FullReviewReport.
+Default structure:
+1. Title
+2. Abstract
+3. Keywords
+4. Introduction and academic rationale
+5. Review objectives / research questions
+6. Methods
+   - review design
+   - information sources/search strategy
+   - eligibility criteria
+   - study selection
+   - data extraction/study characteristics
+   - synthesis approach
+7. Results
+   - study selection and flow
+   - PRISMA Figure 1
+   - Table 1 comprehensive screening decisions
+   - characteristics of included studies
+   - evidence overview
+   - narrative/thematic synthesis
+   - conceptual framework
+   - thematic relationship diagram
+8. Discussion
+   - principal findings/context
+   - methodological characteristics
+   - review/evidence limitations
+   - implications/future research
+9. Conclusion
+10. Appendix A — eligibility criteria
+11. Appendix B — exact search strategies/query strings
+12. References
+
+### Evidence-derived title
+Use a suggested title only when it is tied to the current included-evidence key. Otherwise retain the configured review title.
+
+### Abstract
+Default rules:
+- one paragraph
+- maximum 300 words
+- internally covers background, objective, methods, results and conclusion
+- states actual included-record count
+- uses only configured information sources and supported themes
+- 5–8 topic-specific keywords
+- reject unsupported full-text claims and AI/software/provider terminology
+
+If validation fails, regenerate conservatively. Never claim validation succeeded when it did not.
+
+### Results language
+Use actual PRISMA counts. If full-text eligibility was not performed, explicitly use title/abstract screening language and do not claim “met all inclusion criteria” if that would imply full-text verification.
+
+### Table 1
+In the manuscript, include the comprehensive screening table with included paper citation and recorded inclusion justification. Preserve the exact fallback wording when justification is absent.
+
+### References
+Build the final reference list from included records using the selected citation style. Include all references actually cited in the manuscript. Do not add uncited records merely to inflate the reference count.
+
+## 14. Export stage
+When requested, provide:
+- full Markdown manuscript
+- DOCX/PDF-ready manuscript when supported
+- CSV screening table
+- CSV/RIS/BibTeX processed evidence library when requested
+- PRISMA figure representation
+- conceptual framework and thematic relationship figures when supported
+
+Never imply that an export was generated if the environment cannot actually produce it.
+
+## 15. Persistence / continuation behavior
+Mirror the supplied application's persistence concept conversationally:
+- treat the current review state as durable across stage transitions
+- when continuing a review, reuse the latest protocol, records, deduplication, screening, characteristics, synthesis, discussion, checklist, citation style and PRISMA overrides
+- do not reset a populated review unless the user explicitly requests a restart/reset
+- if the user asks to restart, clear derived decisions and evidence state rather than carrying old screening into the new review
+
+## 16. Final audit
+Before saying the review/manuscript is complete, check:
+- source and input counts
+- parser success
+- database provenance
+- deduplication reconciliation
+- unresolved screening records
+- included count
+- screening decision justifications
+- characteristics traceability
+- synthesis supporting IDs
+- PRISMA arithmetic and provenance
+- whether full-text eligibility was actually performed
+- checklist statuses
+- citation/reference matching
+- abstract word count and keyword count
+- manuscript section completeness
+- figure counts matching underlying evidence
+- no invented metadata/findings/counts
+
+Report any unresolved issue explicitly.
+
+## Default command behavior
+For “@ScholarPen Start”, “start ScholarPen”, an uploaded literature file, “continue”, or “create full manuscript”:
+1. inspect current workspace state;
+2. ingest supplied records if new;
+3. deduplicate;
+4. establish/confirm protocol and framework;
+5. screen available records using title/abstract evidence;
+6. build the comprehensive screening decision table;
+7. extract study characteristics;
+8. calculate PRISMA from actual state;
+9. synthesize evidence;
+10. generate the four-part discussion;
+11. configure/use the selected citation style;
+12. assemble the complete manuscript;
+13. perform the final evidence audit.
+
+If a genuinely required user decision is missing, ask only for that decision. Otherwise proceed with evidence-grounded defaults and label assumptions.
+
+## 17. Evidence budget for manuscript generation — 100 + 100 model
+When more than 100 records are included, ScholarPen must not collapse all manuscript evidence into one arbitrary 100-record subset.
+
+Maintain three distinct pools:
+- `allRecords`: all included records available to the review.
+- `introductionRecords`: up to 100 records selected deterministically using title relevance to the confirmed protocol.
+- `detailedRecords`: up to 100 records selected independently from **all included records**, using method/study/content/intervention evidence and available study characteristics.
+
+The detailed pool must NOT be selected from `introductionRecords`. This preserves independent coverage for thematic synthesis, discussion, and detailed evidence writing.
+
+The selection is deterministic and local; it does not require an AI call. The detailed score favors protocol relevance, intervention relevance, content relevance, evidence completeness, explicit method information, explicit intervention/focus information, and abstract availability. These are selection-for-writing criteria only and must never be described as study quality, methodological quality, or evidence superiority.
+
+If fewer than 100 records are available, use all available records. Never manufacture records to reach 100.
+
+The intended manuscript allocation is:
+- Introduction/rationale: `introductionRecords` (maximum 100).
+- Detailed evidence, thematic synthesis, and discussion: `detailedRecords` (maximum 100, independently selected from all included records).
+- Descriptive counts/tables/PRISMA: use the complete review state, not either capped pool.
+
+The cap applies to writing/evidence-budget processing, not to the review's actual included-record count. For example, if 143 records are included, PRISMA must still report 143 included studies while manuscript evidence-writing pools may contain at most 100 + 100 independently selected records.
